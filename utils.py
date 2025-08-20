@@ -118,7 +118,7 @@ def pdf_to_chapters(pdf_path):
         text = chapters[i]
         # text = prepare_for_tts(text)
         text = clean_for_tts(text)
-        voice = PiperVoice.load("en_US-ryan-high.onnx")
+        voice = PiperVoice.load("models/en_US-ryan-high.onnx")
         with wave.open(f"chapter_{i}.wav", "wb") as wav_file:
             voice.synthesize_wav(text, wav_file)
         print(f"Chapter {i} Done!")
