@@ -2,6 +2,7 @@ import pdfplumber
 import json
 import wave
 from piper import PiperVoice
+import unicodedata
 
 def pdf_to_json(pdf_path, json_path):
     pages_text = []
@@ -20,6 +21,28 @@ def prepare_for_tts(text):
     # Optionally normalize spaces
     clean_text = " ".join(clean_text.split())
     return clean_text
+
+def clean_for_tts(text: str) -> str:
+    # 1. Remove nulls and other control chars
+    text = re.sub(r"[\x00-\x1f\x7f]", "", text)
+    
+    # 2. Normalize unicode (turns composed forms into canonical ones)
+    text = unicodedata.normalize("NFKC", text)
+
+    # 3. Replace “smart” punctuation with ASCII equivalents
+    replacements = {
+        "\u2013": "-",  # en dash
+        "\u2014": "-",  # em dash
+        "\u2018": "'",  # left single quote
+        "\u2019": "'",  # right single quote / apostrophe
+        "\u201c": '"',  # left double quote
+        "\u201d": '"',  # right double quote
+        "\u2026": "...",  # ellipsis
+    }
+    for bad, good in replacements.items():
+        text = text.replace(bad, good)
+
+    return text.strip()
 
 def get_nth_page(json_path, n):
     """
@@ -89,15 +112,16 @@ def pdf_to_chapters(pdf_path):
     # Append last chapter
     if current_chapter.strip():
         chapters.append(current_chapter.strip())
+        
 
-    for i in range(2, len(chapters)):
-        if (i == 3):
-            exit()
+    for i in range(1, 10):
         text = chapters[i]
-        text = prepare_for_tts(text)
+        # text = prepare_for_tts(text)
+        text = clean_for_tts(text)
         voice = PiperVoice.load("en_US-ryan-high.onnx")
         with wave.open(f"chapter_{i}.wav", "wb") as wav_file:
             voice.synthesize_wav(text, wav_file)
+        print(f"Chapter {i} Done!")
 
 
 pdf_to_chapters('atomic-habits.pdf')
