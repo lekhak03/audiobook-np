@@ -1,128 +1,105 @@
 import pdfplumber
-import json
+import json, os
 import wave
 from piper import PiperVoice
 import unicodedata
+import re
+import time
 
+import soundfile as sf
+import torch
+import numpy as np
+from pathlib import Path
+from kokoro import KPipeline
+pipeline = KPipeline(lang_code='a',) # <= make sure lang_code matches voice, reference above.
+
+start_time = time.time()
 def pdf_to_json(pdf_path, json_path):
+    """
+    Extracts text from each page of a PDF and saves as a JSON list of strings.
+    Args:
+        pdf_path (str): Path to the PDF file.
+        json_path (str): Path to save the JSON file.
+    """
     pages_text = []
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
             text = page.extract_text()
-            pages_text.append(text if text else "")  # handle None pages
-    
-    # Save list of strings to JSON
+            pages_text.append(text if text else "")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(pages_text, f, ensure_ascii=False, indent=2)
 
-def prepare_for_tts(text):
-    # Collapse multiple newlines into a single space
-    clean_text = " ".join(text.splitlines())
-    # Optionally normalize spaces
-    clean_text = " ".join(clean_text.split())
-    return clean_text
-
-def clean_for_tts(text: str) -> str:
-    # 1. Remove nulls and other control chars
-    text = re.sub(r"[\x00-\x1f\x7f]", "", text)
-    
-    # 2. Normalize unicode (turns composed forms into canonical ones)
-    text = unicodedata.normalize("NFKC", text)
-
-    # 3. Replace “smart” punctuation with ASCII equivalents
-    replacements = {
-        "\u2013": "-",  # en dash
-        "\u2014": "-",  # em dash
-        "\u2018": "'",  # left single quote
-        "\u2019": "'",  # right single quote / apostrophe
-        "\u201c": '"',  # left double quote
-        "\u201d": '"',  # right double quote
-        "\u2026": "...",  # ellipsis
-    }
-    for bad, good in replacements.items():
-        text = text.replace(bad, good)
-
-    return text.strip()
-
-def get_nth_page(json_path, n):
-    """
-    Get the n-th page text from a JSON file created by pdf_to_json.
-    
-    Args:
-        json_path (str): Path to the JSON file.
-        n (int): Page number (0-based index).
-    
-    Returns:
-        str: Text of the n-th page.
-    """
-    with open(json_path, "r", encoding="utf-8") as f:
-        pages = json.load(f)
-    
-    if n < 0 or n >= len(pages):
-        raise IndexError(f"Page {n} is out of range (total {len(pages)} pages).")
-    
-    return pages[n]
-
-
 import re
+import unicodedata
+import os
+import re
+import json
+import torch
+import numpy as np
+import soundfile as sf
+from pathlib import Path
+
+def batch_tts_from_json(json_path, pipeline, voice_path, output_dir="output_audio", 
+                        list_of_voices=None, max_chars=2000):
+    """Generate batched TTS from JSON chapters using only 'content' field."""
+    
+    # Load chapters
+    with open(json_path, "r", encoding="utf-8") as f:
+        chapters = json.load(f)
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    voice_tensor = torch.load(voice_path, weights_only=True)
+
+    for ch_idx, chapter in enumerate(chapters):
+        chapter_num = chapter.get("id", ch_idx + 1)
+        chapter_text = chapter.get("content", "")
+
+        # Split into smaller batches
+        batches = [chapter_text[i:i+max_chars] for i in range(0, len(chapter_text), max_chars)]
 
 
-# Segegrates PDF into chapter for chapter: Number + \n
-# Args: pdf_path, json_path
-def pdf_to_chapters(pdf_path):
-    print("Working on it....\n")
-    chapters = []
-    current_chapter = ""
+        voice_name = (list_of_voices[ch_idx] if list_of_voices and ch_idx < len(list_of_voices) 
+                      else f"chapter_{chapter_num}")
+        chapter_audio, part_files = [], []
 
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text() or ""
+        for b_idx, batch_text in enumerate(batches):
 
-            # Split into "chapter marker" + rest
-            parts = text.split("\n", 1)
-            if len(parts) == 2:
-                header = parts[0] + "\n"
-                body = parts[1]
+            # Prepend "Chapter X" to the first batch
+            if b_idx == 0:
+                batch_text = f"{batch_text}"
 
-                # --- Step 1: fix broken words across newlines ---
-                body = re.sub(r"([a-z])\n([a-z])", r"\1\2", body)   # join split lowercase words
-                body = re.sub(r"([A-Z])\n([A-Z])", r"\1\2", body)   # join split uppercase words (e.g. W\nHY -> WHY)
-                body = re.sub(r"-\n([a-zA-Z])", r"\1", body)        # remove hyphen + newline (e.g. sto-\nry -> story)
+            # Run TTS generator
+            generator = pipeline(
+                batch_text,
+                voice=voice_tensor,
+                speed=1,
+                split_pattern=r'\n+'
+            )
 
-                # --- Step 2: replace all remaining newlines with spaces ---
-                body = body.replace("\n", " ")
+            for _, _, audio in generator:
+                chapter_audio.append(audio)
+                part_path = f"{output_dir}/{voice_name}_part{b_idx}.wav"
+                sf.write(part_path, audio, 24000)
+                part_files.append(part_path)
 
-                text = header + body
-            else:
-                # no chapter header, just flatten text
-                text = text.replace("\n", " ")
+        # Join all batch audios
+        if chapter_audio:
+            full_audio = np.concatenate(chapter_audio)
+            full_path = f"{output_dir}/{voice_name}_full.wav"
+            sf.write(full_path, full_audio, 24000)
+            print(f"✅ Saved {full_path} with {len(batches)} batches")
 
-            # If page starts with "number + newline" → new chapter
-            if re.match(r"^\d+\n", text.strip()):
-                # Save previous chapter if not empty
-                if current_chapter.strip():
-                    chapters.append(current_chapter.strip())
-                # Start new chapter
-                text = re.sub(r"^(\d+)\n", r"Chapter \1\n", text.strip())
-                current_chapter = text
-            else:
-                # Continuation of the same chapter
-                current_chapter += "\n" + text
-
-    # Append last chapter
-    if current_chapter.strip():
-        chapters.append(current_chapter.strip())
-        
-
-    for i in range(1, 10):
-        text = chapters[i]
-        # text = prepare_for_tts(text)
-        text = clean_for_tts(text)
-        voice = PiperVoice.load("models/en_US-ryan-high.onnx")
-        with wave.open(f"chapter_{i}.wav", "wb") as wav_file:
-            voice.synthesize_wav(text, wav_file)
-        print(f"Chapter {i} Done!")
+        # Delete temporary part files
+        for part_path in part_files:
+            try:
+                os.remove(part_path)
+            except Exception as e:
+                print(f"⚠️ Could not delete {part_path}: {e}")
+        exit()
 
 
-pdf_to_chapters('atomic-habits.pdf')
-print("Done\n")
+voice_path = 'models--hexgrad--Kokoro-82M/snapshots/f3ff3571791e39611d31c381e3a41a3af07b4987/voices/bf_isabella.pt'
+json_path_chapter = 'atomic-habits-processed.json'
+
+batch_tts_from_json(json_path_chapter, pipeline, voice_path)
+print(f"Program took: {time.time() - start_time} seconds to complete")
