@@ -4,3 +4,4 @@ venv
 *.wav
 !test.wav
 models--hexgrad--Kokoro-82M/
+.DS_Store
