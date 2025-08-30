@@ -36,6 +36,7 @@ def pdf_to_json(pdf_path, json_path):
     pages_text = []
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
+            print(page.lines)
             text = page.extract_text()
             pages_text.append(text if text else "")
     with open(json_path, "w", encoding="utf-8") as f:
@@ -136,4 +137,7 @@ def preprocess_book_into_chunks(input_path: str, output_path: str, sentences_per
     print(f"✅ Preprocessed book with chunks saved to {output_path}")
 
 
-preprocess_book_into_chunks("chapters.json", "atomic-habits-chunks.json", sentences_per_chunk=2)
+# preprocess_book_into_chunks("chapters.json", "atomic-habits-chunks.json", sentences_per_chunk=2)
+
+
+pdf_to_json('a.pdf', 'a.json')

@@ -1,6 +1,11 @@
 import time
 from kokoro import KPipeline
 from kokoro.model import KModel
+
+import json, torch, os, soundfile as sf
+from pathlib import Path
+import numpy as np
+
 my_model = KModel()
 
 quie_pl = KPipeline(lang_code='a', model=False) # must do this so KPipeline knows no need to download the model
@@ -8,8 +13,30 @@ quie_pl = KPipeline(lang_code='a', model=False) # must do this so KPipeline know
 # make sure lang_code matches voice, reference above.
 # use model='' to load a local pth model
 pipeline = KPipeline(lang_code='a', model="models--hexgrad--Kokoro-82M/snapshots/f3ff3571791e39611d31c381e3a41a3af07b4987/kokoro-v1_0.pth")
+voice_path = 'models--hexgrad--Kokoro-82M/snapshots/f3ff3571791e39611d31c381e3a41a3af07b4987/voices/bf_isabella.pt'
+json_path_chapter = 'atomic-habits-chunks.json'
 
 start_time = time.time()
+def generate_individual_chunk(chunk_name, chunk_text, output_dir="temp_audio"):
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    wav_path = os.path.join(output_dir, chunk_name)
+    voice_tensor = torch.load(voice_path, weights_only=True)
+    generator = pipeline(
+        chunk_text,
+        voice=voice_tensor,
+        speed=1,
+        split_pattern=r'\n+'
+    )
+
+    audios = []
+    for _, _, audio in generator:
+        audios.append(audio)
+
+    if audios:
+        full_audio = np.concatenate(audios)
+        sf.write(wav_path, full_audio, 24000)
+        print(f"✅ Saved {wav_path}")
+
 
 def chunk_tts_from_json(json_path, pipeline, voice_path, output_dir="output_audio"):
     """
@@ -27,10 +54,6 @@ def chunk_tts_from_json(json_path, pipeline, voice_path, output_dir="output_audi
         "chapter_2": { ... }
     }
     """
-
-    import json, torch, os, soundfile as sf
-    from pathlib import Path
-    import numpy as np
 
     # Load JSON
     with open(json_path, "r", encoding="utf-8") as f:
@@ -71,8 +94,7 @@ def chunk_tts_from_json(json_path, pipeline, voice_path, output_dir="output_audi
     print("🎧 All chunks processed successfully.")
 
 
-voice_path = 'models--hexgrad--Kokoro-82M/snapshots/f3ff3571791e39611d31c381e3a41a3af07b4987/voices/bf_isabella.pt'
-json_path_chapter = 'atomic-habits-chunks.json'
+# chunk_tts_from_json(json_path_chapter, pipeline, voice_path)
+generate_individual_chunk('ch1_001.wav', '1The Surprising Power of Atomic HabitsTHE FATE OF British Cycling changed one day in 2003. The organization,which was the governing body for professional cycling in Great Britain,had recently hired Dave Brailsford as its new performance director.')
 
-chunk_tts_from_json(json_path_chapter, pipeline, voice_path)
 print(f"Program took: {time.time() - start_time} seconds to complete")
