@@ -69,18 +69,35 @@ Also download **NLTK punkt tokenizer** (done automatically in `Preprocess.py`, b
 import nltk
 nltk.download("punkt")
 ```
+---
 
-🔧 Model Setup (Local Only)
+## 🔧 Model Setup (Local Only)
 
-Kokoro automatically downloads its model the first time you initialize a pipeline.
-After that, you can switch to using the cached copy so everything runs 100% offline.
+Kokoro **automatically downloads its model** the first time you initialize a pipeline.
+After that, you can switch to using the cached copy so everything runs **100% offline**.
 
-First run (download)
+### First run (download)
 
 On your very first run, let Kokoro download the model as usual.
-➡️ Comment out this line in Tts.py:
+➡️ **Comment out** this line in `Tts.py`:
 
-This ensures the program always uses **your local copy** of the model and voices, with **no network access** required.
+```python
+# quie_pl = KPipeline(lang_code="a", model=False)
+```
+
+This ensures Kokoro fetches the required files into your Hugging Face cache.
+
+### Subsequent runs (local only)
+
+Once the model is downloaded, copy the cached files into your repo (e.g. under `models--hexgrad--Kokoro-82M/`).
+Then **uncomment** the line so Kokoro doesn’t try to download again:
+
+```python
+# prevent auto-download
+quie_pl = KPipeline(lang_code="a", model=False)
+```
+
+From then on, the pipeline will load the `.pth` model and voice `.pt` files directly from your local folder.
 
 ---
 
