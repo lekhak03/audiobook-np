@@ -70,45 +70,15 @@ import nltk
 nltk.download("punkt")
 ```
 
-## 🔧 Model Setup (Local Only)
+🔧 Model Setup (Local Only)
 
-This project **does not auto-download Kokoro models**.
-Instead, we use the copy that Kokoro normally caches from Hugging Face.
+Kokoro automatically downloads its model the first time you initialize a pipeline.
+After that, you can switch to using the cached copy so everything runs 100% offline.
 
-1. Install `kokoro` once to let it download the model:
+First run (download)
 
-   ```bash
-   pip install kokoro
-   ```
-
-   This will place files in your Hugging Face cache (e.g. `~/.cache/huggingface/`).
-
-2. Copy the model + voice files from the cache into your repo, for example:
-
-   ```
-   models--hexgrad--Kokoro-82M/
-   └─ snapshots/
-      └─ <hash>/
-          ├─ kokoro-v1_0.pth          # model
-          └─ voices/
-              ├─ bf_isabella.pt
-              └─ ...
-   ```
-
-3. In `Tts.py`, the pipeline is created with:
-
-   ```python
-   # create empty pipeline so it doesn’t try to download
-   quie_pl = KPipeline(lang_code="a", model=False)
-
-   # then explicitly load local model
-   pipeline = KPipeline(
-       lang_code="a",
-       model="models--hexgrad--Kokoro-82M/snapshots/<hash>/kokoro-v1_0.pth"
-   )
-
-   voice_path = "models--hexgrad--Kokoro-82M/snapshots/<hash>/voices/bf_isabella.pt"
-   ```
+On your very first run, let Kokoro download the model as usual.
+➡️ Comment out this line in Tts.py:
 
 This ensures the program always uses **your local copy** of the model and voices, with **no network access** required.
 
