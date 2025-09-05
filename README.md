@@ -60,7 +60,7 @@ python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
 # Install dependencies
-pip install torch kokoro soundfile pdfplumber nltk wordninja numpy
+pip install -r requirements.txt
 ```
 
 Also download **NLTK punkt tokenizer** (done automatically in `Preprocess.py`, but you can pre-run it):
